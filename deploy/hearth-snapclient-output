@@ -1,0 +1,226 @@
+#!/usr/bin/python3
+"""Select a verified ALSA output for Hearth's system Snapclient."""
+
+from __future__ import annotations
+
+import re
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+CONFIG = Path("/etc/default/snapclient")
+ALSA_CONFIG = Path("/etc/alsa/conf.d/99-hearth-output-boost.conf")
+BOOST_PCM = "hearth_boost"
+BOOST_CONTROL = "Hearth Output Boost"
+BOOST_DB = 12.0
+PROFILES = {"auto", "analog_stereo", "hdmi_stereo", "hdmi_51_pcm", "hdmi_71_pcm", "null"}
+DEVICE = re.compile(r"^card\s+\d+:\s+([^\s]+).*?,\s+device\s+(\d+):\s+(.+)$", re.I)
+CARD_ID = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def hdmi_connected() -> bool:
+    return any(
+        path.read_text(encoding="utf-8", errors="ignore").strip() == "connected"
+        for path in Path("/sys/class/drm").glob("card*-HDMI-A-*/status")
+    )
+
+
+def devices() -> list[tuple[str, int, str]]:
+    result = subprocess.run(["aplay", "-l"], capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "aplay could not list audio devices")
+    found = []
+    for line in result.stdout.splitlines():
+        match = DEVICE.match(line.strip())
+        if match:
+            found.append((match.group(1), int(match.group(2)), line.lower()))
+    return found
+
+
+def choose(profile: str) -> tuple[str, int]:
+    found = devices()
+    hdmi = next(((card, device) for card, device, text in found if "hdmi" in text), None)
+    analog = next(
+        (
+            (card, device)
+            for card, device, text in found
+            if "hdmi" not in text
+            and any(marker in text for marker in ("headphone", "analog", "bcm2835 alsa"))
+        ),
+        None,
+    )
+    if profile == "auto":
+        selected = hdmi if hdmi_connected() and hdmi else analog
+    elif profile in {"hdmi_stereo", "hdmi_51_pcm", "hdmi_71_pcm"}:
+        if not hdmi_connected():
+            raise RuntimeError("HDMI hot-plug is not detected")
+        selected = hdmi
+    else:
+        selected = analog
+    if not selected:
+        raise RuntimeError(f"No ALSA device matches the {profile} profile")
+    return selected
+
+
+def write_config(content: str) -> None:
+    temporary = CONFIG.with_suffix(".hearth-new")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.chmod(0o644)
+    temporary.replace(CONFIG)
+
+
+def boost_config(card: str, device: int) -> str:
+    if not CARD_ID.fullmatch(card):
+        raise RuntimeError(f"Unsafe ALSA card identifier: {card}")
+    return f'''# Managed by Hearth Audio. Changes are replaced when the output changes.
+pcm.{BOOST_PCM} {{
+    type softvol
+    slave.pcm "plughw:CARD={card},DEV={device}"
+    control {{
+        name "{BOOST_CONTROL}"
+        card "{card}"
+    }}
+    min_dB -51.0
+    max_dB {BOOST_DB:.1f}
+    resolution 256
+}}
+'''
+
+
+def write_boost_config(content: str) -> None:
+    ALSA_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    temporary = ALSA_CONFIG.with_suffix(ALSA_CONFIG.suffix + ".hearth-new")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.chmod(0o644)
+    temporary.replace(ALSA_CONFIG)
+
+
+def restore_boost_config(original: str | None) -> None:
+    if original is None:
+        ALSA_CONFIG.unlink(missing_ok=True)
+    else:
+        write_boost_config(original)
+
+
+def update_config(soundcard: str) -> None:
+    content = CONFIG.read_text(encoding="utf-8")
+    match = re.search(r'^SNAPCLIENT_OPTS="(.*)"\s*$', content, re.M)
+    if not match:
+        raise RuntimeError("SNAPCLIENT_OPTS is missing from /etc/default/snapclient")
+    tokens = shlex.split(match.group(1))
+    cleaned: list[str] = []
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+            continue
+        if token in {"--soundcard", "-s", "--mixer"}:
+            skip = True
+            continue
+        if token.startswith("--soundcard=") or token.startswith("--mixer="):
+            continue
+        cleaned.append(token)
+    cleaned.extend(["--mixer", "software", "--soundcard", soundcard])
+    replacement = 'SNAPCLIENT_OPTS="' + " ".join(cleaned) + '"'
+    updated = content[: match.start()] + replacement + content[match.end() :]
+    write_config(updated)
+
+
+def systemctl(action: str) -> None:
+    result = subprocess.run(["systemctl", action, "snapclient"], capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"Could not {action} Snapclient")
+
+
+def probe(soundcard: str, channels: int) -> None:
+    result = subprocess.run(
+        [
+            "aplay", "-q", "-D", soundcard, "-t", "raw", "-f", "S16_LE",
+            "-r", "48000", "-c", str(channels), "-d", "1", "/dev/zero",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=4,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ALSA could not open {soundcard}")
+
+
+def set_boost(card: str) -> None:
+    # Opening the softvol PCM once creates its user mixer control. Keep it at
+    # the configured ceiling; Snapclient's software mixer remains the
+    # user-facing 0-100 volume control.
+    result = subprocess.run(
+        ["amixer", "-q", "-c", card, "sset", BOOST_CONTROL, "100%"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Could not enable output boost")
+
+
+def main() -> int:
+    if len(sys.argv) != 2 or sys.argv[1] not in PROFILES:
+        print("usage: hearth-snapclient-output auto|analog_stereo|hdmi_stereo|hdmi_51_pcm|hdmi_71_pcm|null", file=sys.stderr)
+        return 2
+    profile = sys.argv[1]
+    if profile == "null":
+        original = CONFIG.read_text(encoding="utf-8")
+        systemctl("stop")
+        try:
+            probe("null", 2)
+            update_config("null")
+            systemctl("restart")
+            time.sleep(0.75)
+            active = subprocess.run(["systemctl", "is-active", "--quiet", "snapclient"], check=False)
+            if active.returncode:
+                raise RuntimeError("Snapclient did not remain active with the standby sink")
+        except Exception:
+            write_config(original)
+            systemctl("restart")
+            raise
+        print("No Output (silent standby sink)")
+        return 0
+    card, device = choose(profile)
+    channels = {"hdmi_51_pcm": 6, "hdmi_71_pcm": 8}.get(profile, 2)
+    # Raspberry Pi HDMI devices commonly expose IEC958_SUBFRAME_LE at the raw
+    # `hw:` layer. Snapclient supplies ordinary signed PCM, so use ALSA's plug
+    # layer to perform the required PCM/IEC958 framing and format conversion.
+    # This is still a direct local output and does not add hardware volume.
+    physical_soundcard = f"plughw:CARD={card},DEV={device}"
+    original = CONFIG.read_text(encoding="utf-8")
+    original_boost = ALSA_CONFIG.read_text(encoding="utf-8") if ALSA_CONFIG.exists() else None
+    systemctl("stop")
+    try:
+        # Verify the physical endpoint before touching either configuration.
+        probe(physical_soundcard, channels)
+        write_boost_config(boost_config(card, device))
+        # The first open creates the softvol mixer control on this ALSA card.
+        probe(BOOST_PCM, channels)
+        set_boost(card)
+        update_config(BOOST_PCM)
+        systemctl("restart")
+        time.sleep(0.75)
+        active = subprocess.run(["systemctl", "is-active", "--quiet", "snapclient"], check=False)
+        if active.returncode:
+            raise RuntimeError("Snapclient did not remain active with the selected ALSA output")
+    except Exception:
+        write_config(original)
+        restore_boost_config(original_boost)
+        systemctl("restart")
+        raise
+    print(f"{BOOST_PCM} (+{BOOST_DB:.0f} dB; {physical_soundcard})")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except RuntimeError as error:
+        print(f"Audio output switch failed: {error}", file=sys.stderr)
+        raise SystemExit(1) from None

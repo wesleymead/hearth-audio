@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c1016">
+  <title>Hearth Audio</title>
+  <script>
+    // Apply display-only cursor suppression before Chromium's first paint.
+    // This avoids briefly exposing the compositor pointer while app.js loads.
+    if (new URLSearchParams(location.search).get("display") === "node") {
+      document.documentElement.classList.add("display-only", "cursor-hidden");
+    }
+  </script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="brand" data-view="home" aria-label="Home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><strong>Hearth</strong><small>WHOLE-HOME AUDIO</small></span>
+      </button>
+      <div class="top-status">
+        <button class="status-pill" id="wifi-status" title="Hub network status">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a14 14 0 0 1 18 0M6.5 12.5a9 9 0 0 1 11 0M10 16a3.4 3.4 0 0 1 4 0M12 19h.01"/></svg>
+          <span id="wifi-label">Connecting…</span>
+        </button>
+        <div class="clock" aria-label="Current time"><strong id="clock-time">--:--</strong><span id="clock-date">---</span></div>
+      </div>
+    </header>
+
+    <aside class="rail" aria-label="Primary navigation">
+      <button class="rail-button active" data-view="home" aria-label="Rooms">
+        <svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Rooms</span>
+      </button>
+      <button class="rail-button" data-view="soundboard" id="soundboard-nav" aria-label="Soundboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v12a3 3 0 1 1-2-2.8V7l11-2v10a3 3 0 1 1-2-2.8V3z"/></svg><span>Sounds</span>
+      </button>
+      <button class="rail-button" data-view="actions" aria-label="Actions">
+        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Actions</span>
+      </button>
+      <button class="rail-button" data-view="system" aria-label="System">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21h-4v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3v-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3h4v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21v4h-.08a1.7 1.7 0 0 0-1.52 1z"/></svg><span>System</span>
+      </button>
+    </aside>
+
+    <main class="main" id="main-content">
+      <section class="view active" id="view-home">
+        <div class="section-heading">
+          <div><p class="eyebrow">YOUR HOME</p><h1>Rooms</h1></div>
+          <div class="heading-actions">
+            <button class="primary-button" id="add-node"><span>＋</span> Add node</button>
+          </div>
+        </div>
+        <div class="node-grid" id="node-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="view-actions">
+        <div class="section-heading"><div><p class="eyebrow">AUTOMATION</p><h1>Action library</h1></div></div>
+        <div class="empty-panel"><span class="orb">⚡</span><h2>Actions live with each node</h2><p>Open a room’s settings to import IR commands and build power, input, volume, and delay sequences.</p></div>
+      </section>
+
+      <section class="view" id="view-soundboard">
+        <div class="section-heading"><div><p class="eyebrow">YOUR AUDIO LIBRARY</p><h1>Soundboard</h1></div><label class="primary-button sound-upload" for="sound-upload">＋ Upload sounds<input id="sound-upload" type="file" accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac,.opus,audio/*" multiple hidden></label></div>
+        <div class="sound-tabs"><button class="active" data-sound-tab="sounds" type="button">Sounds</button><button data-sound-tab="scheduled" type="button">Scheduled sounds</button></div>
+        <div class="sound-panel active" id="sound-panel-sounds">
+          <p class="sound-help">Choose sounds and playback locations, then play them now or create a weekly schedule. Soundboard playback temporarily switches only the selected locations away from AirPlay.</p>
+          <div class="soundboard-grid"><div class="sound-card"><h2>Sounds</h2><div id="sound-list" class="sound-list"></div></div><div class="sound-card"><h2>Play on</h2><div id="sound-targets" class="sound-list"></div></div></div>
+          <div class="sound-actions"><button class="primary-button" id="sound-play" type="button">Play selected</button><button class="secondary-button" id="sound-stop" type="button">Stop playback</button><span id="sound-status" role="status"></span></div>
+        </div>
+        <div class="sound-panel" id="sound-panel-scheduled">
+          <p class="sound-help">Schedules use the Hub’s local time. Select sounds and locations in the Sounds tab first.</p>
+          <div class="sound-card schedule-form"><label>Play at <input id="schedule-time" type="time" value="08:00"></label><div><span>Days of the week</span><div class="schedule-days" id="schedule-days"><label><input type="checkbox" value="0">Mon</label><label><input type="checkbox" value="1">Tue</label><label><input type="checkbox" value="2">Wed</label><label><input type="checkbox" value="3">Thu</label><label><input type="checkbox" value="4">Fri</label><label><input type="checkbox" value="5">Sat</label><label><input type="checkbox" value="6">Sun</label></div></div><label>Expiration date (optional) <input id="schedule-expires" type="date"></label><button class="primary-button" id="schedule-add" type="button">Add schedule</button></div>
+          <div class="sound-card"><h2>Upcoming weekly schedules</h2><div id="schedule-list" class="sound-list"></div></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-system">
+        <div class="section-heading"><div><p class="eyebrow">HUB</p><h1>System</h1></div></div>
+        <div class="system-grid">
+          <article class="info-card"><span>Hub</span><strong id="system-hardware">Raspberry Pi</strong><small>Local playback</small></article>
+          <article class="info-card"><span>Audio engine</span><strong>AirPlay 2 → Snapcast</strong><small>Synchronized PCM transport</small></article>
+          <article class="info-card"><span>Network</span><strong id="system-network">Loading…</strong><small>Ethernet recommended for hub</small></article>
+          <article class="info-card setting-card"><span>Whole-home audio</span><label for="playback-mode">Synchronized playback mode</label><select id="playback-mode"><option value="stereo">Stereo PCM · all locations</option><option value="surround_51">5.1 PCM · compatible HDMI nodes</option><option value="surround_71">7.1 PCM · compatible HDMI nodes</option></select><small id="playback-mode-status">2-channel PCM · all locations</small></article>
+          <article class="info-card setting-card"><span>Soundboard</span><label class="toggle-row" for="soundboard-enabled"><input id="soundboard-enabled" type="checkbox"><strong>Enable soundboard on this Hub</strong></label><small>Turning this off stops soundboard playback and pauses schedules. Uploaded sounds and schedules are kept.</small></article>
+          <article class="info-card setting-card display-settings"><span>Display on this device</span><label for="screensaver-timer">Start screensaver after</label><select id="screensaver-timer"><option value="0">Never</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1800">30 minutes</option></select><small>Saved only in this browser, so the Hub and your phone can use different timers.</small></article>
+          <article class="info-card setting-card quiet-hours-card"><span>Quiet hours on this device</span><label class="toggle-row" for="quiet-hours-enabled"><input id="quiet-hours-enabled" type="checkbox"><strong>Turn the display off overnight</strong></label><div class="time-range"><label for="quiet-hours-start">From<input id="quiet-hours-start" type="time" value="23:00"></label><label for="quiet-hours-end">Until<input id="quiet-hours-end" type="time" value="06:00"></label></div><small>After the local idle timer, the screensaver dims for 30 seconds and turns black 10 seconds later. Touch wakes it.</small></article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="now-playing" id="now-playing">
+      <button class="album-art" id="open-player-screensaver" aria-label="Open now-playing screen"><img id="player-artwork" alt=""><span>H</span></button>
+      <div class="track"><small id="source-label">NOT PLAYING</small><strong id="track-title">Nothing playing</strong><span id="track-artist">—</span></div>
+      <div class="transport" id="transport-controls" aria-label="Playback controls"><button id="previous-track" aria-label="Previous" title="Controlled from the AirPlay sender">‹|</button><button class="play" id="play-pause" aria-label="Pause" title="Controlled from the AirPlay sender">Ⅱ</button><button id="next-track" aria-label="Next" title="Controlled from the AirPlay sender">|›</button></div>
+      <button class="now-playing-screensaver" id="show-screensaver" aria-label="Start screensaver"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H4zM8 20h8M12 16v4"/><path d="M8 10h.01M12 8h.01M16 11h.01"/></svg></button>
+    </footer>
+  </div>
+
+  <section class="screensaver" id="screensaver" aria-hidden="true">
+    <div class="screensaver-scene screensaver-idle active" id="screensaver-idle" aria-hidden="false">
+      <strong id="screensaver-time">--:-- --</strong>
+      <span id="screensaver-date">---</span>
+    </div>
+    <div class="screensaver-scene screensaver-playing" id="screensaver-playing" aria-hidden="true">
+      <div class="screensaver-art"><img id="screensaver-artwork" alt="Current album cover"><span>H</span></div>
+      <div class="screensaver-track">
+        <strong id="screensaver-title">Nothing playing</strong>
+        <span id="screensaver-artist">—</span>
+        <span class="screensaver-album" id="screensaver-album">—</span>
+        <div class="progress"><div><i id="screensaver-progress"></i></div><span id="screensaver-elapsed">0:00</span><span id="screensaver-duration">0:00</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="display-off" id="display-off" aria-hidden="true" aria-label="Display sleeping"></div>
+  <div class="scrim" id="scrim"></div>
+  <aside class="settings-drawer" id="settings-drawer" aria-hidden="true" aria-label="Node settings">
+    <header class="drawer-header">
+      <div><p class="eyebrow">NODE SETTINGS</p><h2 id="drawer-title">Room</h2><span id="drawer-hardware">Hardware</span></div>
+      <button class="icon-button" id="close-settings" type="button" aria-label="Close settings">×</button>
+    </header>
+    <nav class="tabs" id="settings-tabs">
+      <button class="active" data-tab="general">General</button>
+      <button data-tab="power">Power</button>
+      <button data-tab="audio">Audio</button>
+      <button data-tab="network">Network</button>
+      <button data-tab="ir-actions">IR & Actions</button>
+    </nav>
+    <div class="drawer-content">
+      <section class="tab-panel active" data-panel="general">
+        <div class="button-hardware" id="button-hardware">
+          <div class="pin-diagram"><span>GPIO</span><strong id="button-gpio">27</strong></div>
+          <div><strong>Multi-use button</strong><span id="button-wiring">Physical pin 13 → switch → Ground pin 14</span><small id="button-status">Ready</small></div>
+        </div>
+        <label class="field"><span>Node name</span><input id="node-name" data-osk type="text" autocomplete="off"></label>
+        <label class="field"><span>Room</span><input id="node-room" data-osk type="text" autocomplete="off"></label>
+      </section>
+
+      <section class="tab-panel" data-panel="power">
+        <div class="subheading power-heading"><div><strong>Connected device</strong><span>Receiver, soundbar, or amplifier power</span></div></div>
+        <div class="field"><span>Control standard</span><div class="segmented power-transport" id="power-transport"><button data-value="auto">Auto</button><button data-value="hdmi_cec">HDMI-CEC</button><button data-value="ir">IR</button></div><small id="power-capability-status">Auto uses assigned IR actions first, then HDMI-CEC when HDMI is detected.</small></div>
+        <div class="field"><span>Control appearance</span><div class="segmented" id="power-type"><button data-value="button">Button</button><button data-value="switch">On / Off switch</button></div><small>Use a button for a toggle-only remote. Use a switch when separate on/off commands exist.</small></div>
+        <label class="field"><span>State confidence</span><select id="state-mode"><option value="stateless">Stateless · no indicator</option><option value="assumed">Assumed · follows sent commands</option><option value="confirmed">Confirmed · external feedback</option></select></label>
+        <div class="power-actions" id="power-actions">
+          <label class="field" id="power-toggle-field"><span>Toggle action</span><select id="power-toggle-action"></select></label>
+          <label class="field" id="power-on-field"><span>Power-on action</span><select id="power-on-action"></select></label>
+          <label class="field" id="power-off-field"><span>Power-off action</span><select id="power-off-action"></select></label>
+        </div>
+        <div class="notice amber" id="state-notice">IR is one-way. Assumed state can become inaccurate when the original remote is used.</div>
+
+        <div class="subheading power-heading"><div><strong>Raspberry Pi power state</strong><span>What happens after the connected device turns off</span></div></div>
+        <label class="field"><span>After power-off</span><select id="pi-power-mode"><option value="always_on">Keep Pi running · instant control</option><option value="soft_sleep">Soft sleep · Hub can wake it</option><option value="halt">Halt Pi · physical wake required</option></select><small id="pi-power-detail"></small></label>
+        <label class="field" id="shutdown-delay-field"><span>Wait before sleeping</span><select id="shutdown-delay"><option value="3">3 seconds</option><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option></select><small>Allows an IR macro or HDMI-CEC command to finish before audio and display services stop.</small></label>
+        <div class="notice blue" id="wake-guidance"></div>
+      </section>
+
+      <section class="tab-panel" data-panel="audio">
+        <div class="capability-card"><div class="port-icon">HDMI</div><div><strong id="hdmi-sink">Scanning HDMI…</strong><span id="hdmi-detail">—</span></div><button class="secondary-button compact" id="rescan-audio">Rescan</button></div>
+        <label class="field"><span>Audio profile</span><select id="audio-profile"></select><small id="profile-detail"></small></label>
+        <div class="field"><span>Output gain</span><div class="segmented gain-segmented" id="output-gain"><button data-value="-6">−6</button><button data-value="-3">−3</button><button data-value="0">0</button><button data-value="3">+3</button><button data-value="6">+6</button><button data-value="9">+9</button><button data-value="12">+12</button></div><small>+9 dB is the louder default. +12 dB is available for unusually quiet systems, but no digital boost above 0 dB can guarantee that full-scale material will not clip.</small></div>
+        <div class="format-chips" id="format-chips"></div>
+        <div class="notice blue"><strong>Synchronized surround</strong><span>The Hub-wide mode determines the channel count for every location. HDMI nodes can receive discrete 5.1 or 7.1 PCM when their EDID and ALSA output pass verification. AirPlay 2 surround sources use AAC, and Atmos/DTS:X object metadata is not preserved; receiver upmix modes remain available through IR actions.</span></div>
+      </section>
+
+      <section class="tab-panel" data-panel="network">
+        <div class="network-summary"><div class="signal-ring" id="signal-ring"><span id="signal-value">—</span></div><div><strong id="network-title">Network</strong><span id="network-connection">—</span><small id="network-mode">—</small></div></div>
+        <div class="network-address-row"><span>IP address</span><code id="network-address">—</code></div>
+        <div id="wifi-form">
+          <label class="field"><span>Wi-Fi network</span><input id="wifi-ssid" data-osk type="text" autocomplete="off" placeholder="Network name"></label>
+          <label class="field"><span>Password</span><div class="input-action"><input id="wifi-password" data-osk type="password" autocomplete="new-password" placeholder="Not stored on hub"><button id="show-password" type="button">Show</button></div></label>
+          <button class="primary-button wide" id="apply-wifi">Move node to this network</button>
+        </div>
+        <div class="notice amber" id="ethernet-only" hidden>This Pi 2 B is connected by Ethernet and has no built-in Wi-Fi. Attach a supported USB Wi-Fi adapter to enable wireless configuration.</div>
+      </section>
+
+      <section class="tab-panel" data-panel="ir-actions">
+        <div class="ir-import"><div><strong>Flipper Zero remote</strong><span id="ir-summary">No .ir file imported</span></div><label class="secondary-button compact file-button">Import .ir<input type="file" id="ir-file" accept=".ir,text/plain"></label></div>
+        <div class="signal-chips" id="signal-chips"></div>
+        <div class="subheading"><div><strong>Action list</strong><span>Commands run from top to bottom.</span></div><button class="secondary-button compact" id="add-action">＋ Action</button></div>
+        <div class="action-list" id="action-list"></div>
+        <button class="primary-button wide" id="save-actions">Save action list</button>
+      </section>
+    </div>
+    <footer class="drawer-footer"><span id="save-status">Changes save to the hub.</span><button class="primary-button" id="save-settings">Save settings</button></footer>
+  </aside>
+
+  <section class="pairing-modal" id="pairing-modal" aria-hidden="true">
+    <button class="icon-button modal-close" aria-label="Close">×</button><span class="pair-icon pairing-pulse">⌁</span><p class="eyebrow">ROAMING FOR NODES</p><h2>Hold the node button</h2><p>The hub is discoverable for two minutes. Hold the node button for five seconds; it will find this hub and appear automatically. No PIN is required.</p><div class="pairing-status"><i></i><span id="pairing-status">Waiting for a node on this network…</span></div><button class="secondary-button wide" id="pairing-done">Done</button>
+  </section>
+
+  <section class="pairing-modal node-type-modal" id="node-type-modal" aria-hidden="true">
+    <button class="icon-button modal-close" aria-label="Close">×</button>
+    <p class="eyebrow">ADD A NODE</p>
+    <h2>What would you like to add?</h2>
+    <div class="node-type-options">
+      <button id="add-permanent-node-choice" class="node-type-choice" type="button"><span class="node-type-icon">＋</span><span><strong>Permanent Hearth node</strong><small>Pair a Raspberry Pi audio node on this network.</small></span></button>
+      <button id="add-temporary-node-choice" class="node-type-choice" type="button"><span class="node-type-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 5h4M12 18.5h.01"/></svg></span><span><strong>Temporary web node</strong><small id="temporary-node-choice-detail">Play synchronized audio through this browser.</small></span></button>
+    </div>
+  </section>
+
+  <section class="pairing-modal browser-node-modal" id="browser-node-modal" aria-hidden="true">
+    <button class="icon-button modal-close" aria-label="Close">×</button>
+    <div id="browser-node-name-step">
+      <span class="pair-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 5h4M12 18.5h.01"/></svg></span>
+      <p class="eyebrow">TEMPORARY BROWSER NODE</p>
+      <h2>Play Hearth audio here</h2>
+      <p>This device will appear with your other rooms until this Hearth page is closed.</p>
+      <label class="field browser-name-field" for="browser-node-name"><span>Node name</span><input id="browser-node-name" data-osk type="text" maxlength="48" autocomplete="off" placeholder="Type temporary node name"></label>
+      <button class="primary-button wide" id="create-browser-node">Add temporary node</button>
+    </div>
+    <div id="browser-node-player-step" hidden>
+      <p class="eyebrow">TEMPORARY BROWSER NODE</p>
+      <h2 id="browser-node-player-title">Browser audio</h2>
+      <div class="browser-node-status" id="browser-node-status"><i></i><span>Tap Play in the player below to start synchronized audio.</span></div>
+      <iframe id="snapweb-player" class="snapweb-player" title="Snapcast browser audio player" allow="autoplay"></iframe>
+      <p class="browser-player-help">After tapping Play once, you can hide this panel. Keep this Hearth page open while listening.</p>
+      <div class="browser-node-actions"><button class="primary-button" id="hide-browser-node-setup">Hide setup</button></div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <section class="keyboard" id="keyboard" aria-hidden="true" aria-label="On-screen keyboard">
+    <div class="keyboard-tools"><span>On-screen keyboard</span><button id="keyboard-close">Done</button></div>
+    <div class="keyboard-keys" id="keyboard-keys"></div>
+  </section>
+
+  <template id="node-card-template">
+    <article class="node-card">
+      <div class="node-card-top"><span class="online-dot"></span><div><strong class="node-name"></strong><small class="node-hardware"></small></div><button class="icon-button settings-button" aria-label="Open settings">•••</button></div>
+      <div class="output-badge"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 4V5L9 9zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span class="output-label"></span></div>
+      <div class="node-controls"><button class="power-button" aria-label="Power"><svg viewBox="0 0 24 24"><path d="M12 2v10M6.3 5.7a8 8 0 1 0 11.4 0"/></svg></button><button class="mute-button" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zM17 9l5 6M22 9l-5 6"/></svg></button><input class="volume" type="range" min="0" max="100" aria-label="Volume"><output class="volume-value"></output></div>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>

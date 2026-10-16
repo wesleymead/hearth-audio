@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec /usr/local/sbin/hearth-node-display-prepare

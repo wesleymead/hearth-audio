@@ -1,0 +1,5 @@
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-output auto
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-output analog_stereo
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-output hdmi_stereo
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-output hdmi_51_pcm
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-output hdmi_71_pcm

@@ -1,0 +1,2 @@
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-display-power on
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-display-power off

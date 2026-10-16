@@ -1,0 +1,3 @@
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-playback-mode stereo
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-playback-mode surround_51
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-playback-mode surround_71

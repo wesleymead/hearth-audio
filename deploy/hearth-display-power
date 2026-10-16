@@ -1,0 +1,65 @@
+#!/usr/bin/python3
+"""Switch a local Linux backlight on or off for the Hearth Hub."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+
+BACKLIGHT_ROOT = Path("/sys/class/backlight")
+STATE_PATH = Path("/run/hearth-audio/display-brightness.json")
+
+
+def read_int(path: Path, fallback: int = 0) -> int:
+    try:
+        return int(path.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return fallback
+
+
+def write_value(path: Path, value: int) -> bool:
+    try:
+        path.write_text(f"{value}\n", encoding="ascii")
+        return True
+    except OSError:
+        return False
+
+
+def main() -> int:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"on", "off"}:
+        print("usage: hearth-display-power on|off", file=sys.stderr)
+        return 2
+    devices = sorted(BACKLIGHT_ROOT.glob("*")) if BACKLIGHT_ROOT.exists() else []
+    saved: dict[str, int] = {}
+    if STATE_PATH.exists():
+        try:
+            saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            saved = {}
+    changed = 0
+    if sys.argv[1] == "off":
+        for device in devices:
+            brightness = read_int(device / "brightness")
+            if brightness > 0:
+                saved[device.name] = brightness
+            powered = write_value(device / "bl_power", 4)
+            dimmed = write_value(device / "brightness", 0)
+            changed += int(powered or dimmed)
+        if devices:
+            STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            STATE_PATH.write_text(json.dumps(saved), encoding="utf-8")
+    else:
+        for device in devices:
+            powered = write_value(device / "bl_power", 0)
+            maximum = max(1, read_int(device / "max_brightness", 255))
+            target = min(max(1, int(saved.get(device.name, maximum))), maximum)
+            restored = write_value(device / "brightness", target)
+            changed += int(powered or restored)
+    print(f"{sys.argv[1]}: {changed} backlight device(s) changed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

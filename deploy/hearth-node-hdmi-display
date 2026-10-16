@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+CONFIG=${HEARTH_NODE_CONFIG:-/etc/hearth-audio/node.json}
+PROJECT_DIR=${HEARTH_PROJECT_DIR:-/opt/hearth-audio}
+
+DISPLAY_TYPE=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("display", {}).get("type", "hdmi"))' "$CONFIG")
+if [ "$DISPLAY_TYPE" != "spotpear_st7789" ]; then
+    echo "The independent HDMI renderer is only used by SpotPear dual-display nodes."
+    exit 0
+fi
+
+LAST_STATUS=
+while :; do
+    CONNECTED=false
+    for STATUS in /sys/class/drm/card*-HDMI-A-*/status; do
+        if [ -r "$STATUS" ] && [ "$(cat "$STATUS")" = "connected" ]; then
+            CONNECTED=true
+            break
+        fi
+    done
+    if [ "$CONNECTED" = true ] && [ -c /dev/fb0 ]; then
+        break
+    fi
+    if [ "$LAST_STATUS" != waiting ]; then
+        echo "Waiting for an HDMI display and /dev/fb0"
+        LAST_STATUS=waiting
+    fi
+    sleep 5
+done
+
+export HEARTH_DISPLAY_BACKEND=fbdev
+export HEARTH_FRAMEBUFFER=/dev/fb0
+export HEARTH_DISPLAY_LAYOUT=full
+export PYGAME_HIDE_SUPPORT_PROMPT=1
+export SDL_VIDEODRIVER=dummy
+export SDL_AUDIODRIVER=dummy
+
+echo "Opening the Hearth full-size HDMI display on $HEARTH_FRAMEBUFFER"
+exec /usr/bin/python3 "$PROJECT_DIR/node/display.py" --config "$CONFIG"

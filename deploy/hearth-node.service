@@ -1,0 +1,22 @@
+[Unit]
+Description=Hearth Audio playback node agent
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hearth
+Group=hearth
+SupplementaryGroups=audio video gpio
+WorkingDirectory=/opt/hearth-audio
+Environment=PYTHONUNBUFFERED=1
+Environment=LG_WD=/run/hearth-node
+RuntimeDirectory=hearth-node
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/python3 -m node.agent --config /etc/hearth-audio/node.json
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

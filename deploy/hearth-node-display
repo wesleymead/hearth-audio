@@ -1,0 +1,67 @@
+#!/bin/sh
+set -eu
+
+CONFIG=${HEARTH_NODE_CONFIG:-/etc/hearth-audio/node.json}
+PROJECT_DIR=${HEARTH_PROJECT_DIR:-/opt/hearth-audio}
+LAST_STATUS=
+
+report_status() {
+    if [ "$LAST_STATUS" != "$1" ]; then
+        echo "$1"
+        LAST_STATUS=$1
+    fi
+}
+
+DISPLAY_TYPE=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("display", {}).get("type", "hdmi"))' "$CONFIG")
+if [ "$DISPLAY_TYPE" = "spotpear_st7789" ]; then
+    HEARTH_FRAMEBUFFER=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("display", {}).get("framebuffer", "/dev/fb1"))' "$CONFIG")
+    HEARTH_DISPLAY_LAYOUT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("display", {}).get("layout", "compact"))' "$CONFIG")
+    export HEARTH_FRAMEBUFFER HEARTH_DISPLAY_LAYOUT
+    while [ ! -c "$HEARTH_FRAMEBUFFER" ]; do
+        report_status "Waiting for the SpotPear framebuffer $HEARTH_FRAMEBUFFER"
+        sleep 5
+    done
+else
+    while :; do
+        CONNECTED=false
+        for STATUS in /sys/class/drm/card*-HDMI-A-*/status; do
+            if [ -r "$STATUS" ] && [ "$(cat "$STATUS")" = "connected" ]; then
+                CONNECTED=true
+                break
+            fi
+        done
+        if [ "$CONNECTED" = true ]; then
+            break
+        fi
+        report_status "Waiting for an HDMI display"
+        sleep 5
+    done
+fi
+
+export PYGAME_HIDE_SUPPORT_PROMPT=1
+export SDL_AUDIODRIVER=dummy
+export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
+
+# Use the current desktop in place when one exists. Raspberry Pi OS Lite has
+# neither socket, so SDL talks directly to KMS/DRM without a window manager.
+if [ -S /tmp/.X11-unix/X0 ]; then
+    export DISPLAY=${DISPLAY:-:0}
+    if [ -z "${XAUTHORITY:-}" ] && [ -r "$HOME/.Xauthority" ]; then
+        export XAUTHORITY="$HOME/.Xauthority"
+    fi
+    export SDL_VIDEODRIVER=x11
+elif [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    for SOCKET in "$XDG_RUNTIME_DIR"/wayland-*; do
+        if [ -S "$SOCKET" ]; then
+            export WAYLAND_DISPLAY=${SOCKET##*/}
+            export SDL_VIDEODRIVER=wayland
+            break
+        fi
+    done
+fi
+if [ -z "${SDL_VIDEODRIVER:-}" ]; then
+    export SDL_VIDEODRIVER=kmsdrm
+fi
+
+report_status "Opening the Hearth native display with SDL $SDL_VIDEODRIVER${HEARTH_FRAMEBUFFER:+ on $HEARTH_FRAMEBUFFER}"
+exec /usr/bin/python3 "$PROJECT_DIR/node/display.py" --config "$CONFIG"

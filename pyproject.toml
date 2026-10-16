@@ -1,0 +1,8 @@
+[project]
+name = "home-audio-system"
+version = "0.1.0"
+description = "Prototype whole-home audio hub and Raspberry Pi node agent"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

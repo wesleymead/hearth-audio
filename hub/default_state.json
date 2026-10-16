@@ -1,0 +1,63 @@
+{
+  "system": {
+    "schemaVersion": 8,
+    "name": "Hearth Audio",
+    "version": "0.2.0",
+    "wifi": {
+      "status": "unknown",
+      "ssid": "",
+      "signal": 0
+    },
+    "settings": {
+      "screensaverSeconds": 120,
+      "soundboardEnabled": true,
+      "playbackMode": "stereo",
+      "playbackChannels": 2
+    },
+    "playback": {
+      "state": "stopped",
+      "title": "",
+      "artist": "",
+      "album": "",
+      "source": "AirPlay 2",
+      "client": "",
+      "positionSeconds": 0,
+      "durationSeconds": 0,
+      "positionUpdatedAt": 0,
+      "artworkRevision": 0,
+      "live": true,
+      "transportControl": false
+    }
+  },
+  "nodes": [
+    {
+      "id": "hearth-hub",
+      "name": "Hub",
+      "room": "Hub",
+      "hardware": "Raspberry Pi 3 B+ · Local playback",
+      "local": true,
+      "online": false,
+      "enabled": true,
+      "volume": 50,
+      "muted": false,
+      "connection": {"type": "local", "address": "127.0.0.1", "quality": 100},
+      "button": {"enabled": false, "status": "not installed"},
+      "wifi": {"supported": false, "status": "managed by hub", "ssid": "", "signal": 0},
+      "audio": {
+        "requestedProfile": "auto",
+        "activeProfile": "analog_stereo",
+        "outputGainDb": 9,
+        "profiles": [
+          {"id": "auto", "label": "System default · Synchronized stereo", "available": true, "detail": "Uses the hub's current Raspberry Pi OS audio output through the local Snapclient."},
+          {"id": "analog_stereo", "label": "3.5 mm / default · Stereo", "available": true, "detail": "Synchronized stereo PCM through the hub's current default ALSA output."}
+        ],
+        "detected": {"analog": true, "hdmiConnected": false, "sink": "System default output", "maxPcmChannels": 2, "formats": ["PCM", "FLAC transport"]}
+      },
+      "power": {"controlType": "switch", "stateMode": "assumed", "state": "on", "transport": "none", "piPowerMode": "always_on", "shutdownDelaySeconds": 10, "onActionId": "", "offActionId": "", "pressActionId": ""},
+      "ir": {"fileName": "", "signals": []},
+      "actions": [],
+      "lastAction": null,
+      "agentUrl": ""
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+[Unit]
+Description=Hearth independent HDMI now-playing display
+After=network-online.target systemd-user-sessions.service hearth-node.service hearth-node-display.service
+Wants=network-online.target hearth-node-display.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=hearth video render audio input dialout i2c
+WorkingDirectory=/opt/hearth-audio
+Environment=HEARTH_NODE_CONFIG=/etc/hearth-audio/node.json
+Environment=HEARTH_PROJECT_DIR=/opt/hearth-audio
+Environment=HOME=/home/pi
+Environment=PYGAME_HIDE_SUPPORT_PROMPT=1
+Environment=HEARTH_DISPLAY_BACKEND=fbdev
+Environment=HEARTH_FRAMEBUFFER=/dev/fb0
+Environment=HEARTH_DISPLAY_LAYOUT=full
+Environment=SDL_VIDEODRIVER=dummy
+Environment=SDL_AUDIODRIVER=dummy
+Environment=SDL_RENDER_DRIVER=software
+ExecStartPre=+/usr/local/sbin/hearth-node-hdmi-display-prepare
+ExecStart=/usr/local/bin/hearth-node-hdmi-display
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=8
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

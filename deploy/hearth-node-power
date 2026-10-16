@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    sleep)
+        systemctl stop --no-block snapclient.service hearth-node-display.service
+        systemctl stop --no-block hearth-node-hdmi-display.service 2>/dev/null || true
+        ;;
+    wake)
+        systemctl start --no-block snapclient.service hearth-node-display.service
+        if systemctl --quiet is-enabled hearth-node-hdmi-display.service 2>/dev/null; then
+            systemctl start --no-block hearth-node-hdmi-display.service
+        fi
+        ;;
+    halt)
+        systemctl stop hearth-node-halt.timer hearth-node-halt.service 2>/dev/null || true
+        systemd-run --quiet --unit=hearth-node-halt --on-active=2s --collect /usr/bin/systemctl poweroff
+        ;;
+    *)
+        echo "usage: hearth-node-power sleep|wake|halt" >&2
+        exit 2
+        ;;
+esac

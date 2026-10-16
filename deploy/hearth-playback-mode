@@ -1,0 +1,152 @@
+#!/usr/bin/python3
+"""Transactionally switch Hearth's Shairport/Snapcast channel count."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+MODES = {"stereo": 2, "surround_51": 6, "surround_71": 8}
+SHAIRPORT_CONFIG = Path("/etc/shairport-sync.conf")
+SNAPSERVER_CONFIG = Path("/etc/snapserver.conf")
+MODE_FILE = Path("/etc/hearth-audio/playback-mode")
+OUTPUT_HELPER = Path("/usr/local/sbin/hearth-snapclient-output")
+
+
+def shairport_config(channels: int) -> str:
+    return f'''general =
+{{
+    name = "Hearth Audio";
+    service_type = "airplay2";
+    output_backend = "pipe";
+    interpolation = "vernier";
+    dbus_service_bus = "system";
+    six_channel_mode = "on";
+    eight_channel_mode = "on";
+    mixdown = "auto";
+}};
+
+pipe =
+{{
+    name = "/run/hearth-audio/airplay.pcm";
+    output_rate = 48000;
+    output_format = "S16_LE";
+    output_channels = {channels};
+}};
+
+metadata =
+{{
+    enabled = "yes";
+    include_cover_art = "yes";
+    pipe_name = "/run/hearth-audio/metadata";
+    pipe_timeout = 5000;
+}};
+'''
+
+
+def snapserver_config(channels: int) -> str:
+    return f'''[stream]
+bind_to_address = 0.0.0.0
+port = 1704
+source = pipe:///run/hearth-audio/airplay.pcm?name=AirPlay&mode=read&sampleformat=48000:16:{channels}&codec=flac&chunk_ms=26
+source = pipe:///run/hearth-audio/soundboard.pcm?name=Soundboard&mode=read&sampleformat=48000:16:2&codec=flac&chunk_ms=26
+default_source = AirPlay
+
+[http]
+enabled = true
+bind_to_address = 0.0.0.0
+port = 1780
+doc_root = /usr/share/snapserver/snapweb/
+
+[tcp]
+enabled = true
+bind_to_address = 0.0.0.0
+port = 1705
+
+[streaming_client]
+initial_volume = 100
+'''
+
+
+def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, capture_output=True, text=True, check=check)
+
+
+def write_atomic(path: Path, content: str) -> None:
+    temporary = path.with_suffix(path.suffix + ".hearth-new")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.chmod(0o644)
+    temporary.replace(path)
+
+
+def service_exists(name: str) -> bool:
+    result = run("systemctl", "list-unit-files", f"{name}.service", "--no-legend", check=False)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def restart_pipeline(mode: str) -> None:
+    run("systemctl", "restart", "snapserver")
+    run("systemctl", "restart", "shairport-sync")
+    if service_exists("snapclient"):
+        # The Hub's local analog output cannot consume a six/eight-channel
+        # stream. Remote Snapclients reconnect independently to Snapserver.
+        if mode == "stereo" and OUTPUT_HELPER.exists():
+            # Re-resolve the Hub's physical output and apply Hearth's managed
+            # managed ALSA softvol stage before bringing the local client back.
+            result = run(str(OUTPUT_HELPER), "auto", check=False)
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Hub audio output setup failed")
+        else:
+            run("systemctl", "restart" if mode == "stereo" else "stop", "snapclient")
+    time.sleep(1)
+    for service in ("snapserver", "shairport-sync"):
+        if run("systemctl", "is-active", "--quiet", service, check=False).returncode:
+            raise RuntimeError(f"{service} did not recover after the playback mode change")
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        print("Run this helper with sudo.", file=sys.stderr)
+        return 1
+    if len(sys.argv) != 2 or sys.argv[1] not in MODES:
+        print("usage: hearth-playback-mode stereo|surround_51|surround_71", file=sys.stderr)
+        return 2
+
+    mode = sys.argv[1]
+    channels = MODES[mode]
+    originals = {
+        SHAIRPORT_CONFIG: SHAIRPORT_CONFIG.read_text(encoding="utf-8"),
+        SNAPSERVER_CONFIG: SNAPSERVER_CONFIG.read_text(encoding="utf-8"),
+    }
+    previous_mode = MODE_FILE.read_text(encoding="utf-8").strip() if MODE_FILE.exists() else "stereo"
+    if previous_mode not in MODES:
+        previous_mode = "stereo"
+
+    try:
+        run("systemctl", "stop", "shairport-sync", check=False)
+        write_atomic(SHAIRPORT_CONFIG, shairport_config(channels))
+        write_atomic(SNAPSERVER_CONFIG, snapserver_config(channels))
+        restart_pipeline(mode)
+        MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        write_atomic(MODE_FILE, mode + "\n")
+    except Exception as error:
+        for path, content in originals.items():
+            write_atomic(path, content)
+        try:
+            restart_pipeline(previous_mode)
+        except Exception as rollback_error:
+            print(f"Playback mode failed ({error}); rollback also failed ({rollback_error}).", file=sys.stderr)
+            return 1
+        print(f"Playback mode failed and was rolled back: {error}", file=sys.stderr)
+        return 1
+
+    print(f"{mode} ({channels} channels)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

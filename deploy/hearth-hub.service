@@ -1,0 +1,19 @@
+[Unit]
+Description=Hearth Audio hub web service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hearth
+Group=hearth
+WorkingDirectory=/opt/hearth-audio
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m hub.server --host 0.0.0.0 --port 8080 --state /var/lib/hearth-audio/state.json --metadata-pipe /run/hearth-audio/metadata
+Restart=on-failure
+RestartSec=3
+SupplementaryGroups=audio
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

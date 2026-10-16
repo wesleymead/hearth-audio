@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+# SDL/KMS can successfully allocate and update a DRM framebuffer while fbcon
+# still has the connector in FB_BLANK_POWERDOWN (4).  In that state the Hearth
+# process is healthy but the physical HDMI screen remains black.  Resetting the
+# foreground VT mirrors the known-good PosterDisplay launcher, and writing 0 to
+# fbcon's blank controls makes the wake explicit and repeatable.
+chvt 1
+
+if [ -w /dev/tty1 ]; then
+    printf '\033c' > /dev/tty1 || true
+    # The framebuffer renderer owns the whole screen, so the fbcon text caret
+    # must stay hidden rather than blinking over the top edge of the UI.
+    printf '\033[?25l' > /dev/tty1 || true
+    setterm --cursor off --blank 0 --powerdown 0 --powersave off < /dev/tty1 > /dev/tty1 2>/dev/null || true
+fi
+
+for BLANK in /sys/class/graphics/fb*/blank; do
+    if [ -w "$BLANK" ]; then
+        printf '0' > "$BLANK"
+    fi
+done

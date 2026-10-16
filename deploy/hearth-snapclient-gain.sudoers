@@ -1,0 +1,7 @@
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain -6
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain -3
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain 0
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain 3
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain 6
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain 9
+hearth ALL=(root) NOPASSWD: /usr/local/sbin/hearth-snapclient-gain 12

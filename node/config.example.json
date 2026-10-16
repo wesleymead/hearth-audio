@@ -1,0 +1,27 @@
+{
+  "id": "replace-with-unique-hostname",
+  "name": "New Node",
+  "room": "Unassigned",
+  "hubUrl": "",
+  "listenHost": "0.0.0.0",
+  "listenPort": 8090,
+  "advertisedUrl": "",
+  "pairingToken": "",
+  "allowSystemChanges": false,
+  "allowAudioOutputChanges": true,
+  "allowCecControl": true,
+  "cecLogicalAddress": 5,
+  "irDevice": "/dev/lirc0",
+  "audioProfile": "auto",
+  "streamChannels": 2,
+  "button": {
+    "enabled": false,
+    "gpio": 27,
+    "physicalPin": 13,
+    "groundPin": 14,
+    "pullUp": true,
+    "bounceSeconds": 0.05,
+    "longPressSeconds": 5.0,
+    "resetPressSeconds": 15.0
+  }
+}
